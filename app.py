@@ -59,7 +59,7 @@ def convertir_word_a_pdf_libreoffice(docx_path):
         ]
         
         # Ejecutar conversión
-        resultado = subprocess.run(comando, capture_output=True, text=True, timeout=30)
+        resultado = subprocess.run(comando, capture_output=True, text=True, timeout=60)
         
         if resultado.returncode != 0:
             raise Exception(f"Error en LibreOffice: {resultado.stderr}")
