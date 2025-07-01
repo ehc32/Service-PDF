@@ -4,7 +4,7 @@ services:
     env: python
     buildCommand: |
       apt-get update && 
-      apt-get install -y libreoffice fonts-liberation fontconfig &&
+      apt-get install -y libreoffice fonts-liberation fontconfig texlive-xetex &&
       pip install -r requirements.txt
     startCommand: python app.py
     envVars:
