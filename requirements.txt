@@ -1,0 +1,9 @@
+Flask==2.3.3
+flask-cors==4.0.0
+python-docx==0.8.11
+docxtpl==0.16.7
+gspread==5.10.0
+google-auth==2.23.0
+google-auth-oauthlib==1.0.0
+google-auth-httplib2>=0.2.0,<1.0.0
+num2words==0.5.12
