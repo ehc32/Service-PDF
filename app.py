@@ -136,10 +136,12 @@ def generar_documento():
     data = request.get_json()
     formato = data.get('formato', 'word').lower()  # 'word', 'pdf', 'ambos'
     
-    # Datos predeterminados
-    data["Acompañamie"] = "$ 1.516.141"
-    data["Diseño_Calculo"] = "$ 23.918.292"
-    data["Diseño_Sanitario"] = "$ 20.501.393"
+    # Datos predeterminados solo si no vienen del usuario
+    if not data.get("Acompañamie"): data["Acompañamie"] = "1.516.141"
+    if not data.get("Diseño_Calculo"): data["Diseño_Calculo"] = data.get("Diseño_Calcu", "23.918.292")
+    if not data.get("Diseño_Sanitario"): data["Diseño_Sanitario"] = "20.501.393"
+    # Elimina el campo alternativo si existe
+    if "Diseño_Calcu" in data: del data["Diseño_Calcu"]
     
     def extraer_numero(texto):
         if not texto:
@@ -147,7 +149,7 @@ def generar_documento():
         return int(''.join(filter(str.isdigit, str(texto))) or 0)
     
     def formatear_moneda(numero):
-        return "${:,.0f}".format(numero).replace(",", ".")
+        return "{:,.0f}".format(numero).replace(",", ".")
     
     # Cálculos
     subtotal1 = extraer_numero(data.get("Subtotal_1")) or (
