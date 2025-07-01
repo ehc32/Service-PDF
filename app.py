@@ -10,6 +10,8 @@ import json
 from docxtpl import DocxTemplate
 import tempfile
 import shutil
+from datetime import datetime
+import locale
 
 app = Flask(__name__)
 CORS(app)
@@ -138,11 +140,9 @@ def generar_documento():
     
     # Datos predeterminados solo si no vienen del usuario
     if not data.get("Acompañamie"): data["Acompañamie"] = "1.516.141"
-    if not data.get("Diseño_Calculo"): data["Diseño_Calculo"] = data.get("Diseño_Calcu", "23.918.292")
+    if not data.get("Diseño_Calcu"): data["Diseño_Calcu"] = data.get("Diseño_Calcu", "23.918.292")
     if not data.get("Diseño_Sanitario"): data["Diseño_Sanitario"] = "20.501.393"
-    # Elimina el campo alternativo si existe
-    if "Diseño_Calcu" in data: del data["Diseño_Calcu"]
-    
+    # Elimina el campo alternativo si existe    
     def extraer_numero(texto):
         if not texto:
             return 0
@@ -154,15 +154,28 @@ def generar_documento():
     # Cálculos
     subtotal1 = extraer_numero(data.get("Subtotal_1")) or (
         extraer_numero(data.get("Diseño_Ar")) +
-        extraer_numero(data.get("Diseño_Calculo")) +
+        extraer_numero(data.get("Diseño_Calcu")) +
         extraer_numero(data.get("Acompañamie"))
     )
     subtotal2 = extraer_numero(data.get("Subtotal_2")) or (
-        extraer_numero(data.get("Diseño_Calculo")) +
+        extraer_numero(data.get("Diseño_Calcu")) +
         extraer_numero(data.get("Diseño_Sanitario")) +
         extraer_numero(data.get("Presupuesta"))
     )
     total = subtotal1 + subtotal2
+    
+    # Agregar la fecha actual en formato '01 de junio de 2025'
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+    except:
+        try:
+            locale.setlocale(locale.LC_TIME, 'es_CO.UTF-8')
+        except:
+            locale.setlocale(locale.LC_TIME, '')  # Usa el locale por defecto si no encuentra español
+    fecha_actual = datetime.now().strftime('%d de %B de %Y')
+    # Asegura que el mes esté en minúsculas
+    fecha_actual = fecha_actual[:6] + fecha_actual[6:].lower()
+    data["fecha"] = fecha_actual
     
     data["Subtotal_1"] = formatear_moneda(subtotal1)
     data["Subtotal_2"] = formatear_moneda(subtotal2)
