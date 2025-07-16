@@ -23,6 +23,13 @@ def numero_a_texto(numero):
     except:
         return str(numero)
 
+def formatear_moneda(valor):
+    try:
+        numero = int(str(valor).replace('.', '').replace(',', '').replace('$', '').replace(' ', ''))
+        return "{:,}".format(numero).replace(",", ".")
+    except:
+        return valor if valor is not None else ''
+
 def guardar_en_google_sheets(data):
     scope = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -146,22 +153,22 @@ def generar_documento():
     data = request.get_json()
     formato = data.get('formato', 'word').lower()  # 'word', 'pdf', 'ambos'
 
-    # Mapear los datos a los nombres de variables usados en la plantilla
+    # Mapear los datos a los nombres de variables usados en la plantilla (igual que en la imagen)
     contexto = {
         'nombre': data.get('nombre', ''),
         'telefono': data.get('telefono', ''),
         'correo': data.get('correo', ''),
-        'diseno_arquitectonico': data.get('Diseño_Arquitectonico', ''),
-        'diseno_estructural': data.get('Diseño_Estructural', ''),
-        'acompanamiento_licencias': data.get('Acompañamiento_Licencias', ''),
-        'subtotal_etapa_1': data.get('Subtotal_Etapa_I', ''),
-        'diseno_electrico': data.get('Diseño_Electrico', ''),
-        'diseno_hidraulico': data.get('Diseño_Hidraulico', ''),
-        'presupuesto_proyecto': data.get('Presupuesto_Proyecto', ''),
-        'subtotal_etapa_2': data.get('Subtotal_Etapa_II', ''),
-        'total_general': data.get('Total_General', ''),
-        'total_general_texto': data.get('Total_General_Texto', ''),
-        'costo_construccion': data.get('Costo_Construccion', ''),
+        'diseno_arquitectonico': formatear_moneda(data.get('diseno_arquitectonico', data.get('Diseño_Arquitectonico', ''))),
+        'diseno_estructural': formatear_moneda(data.get('diseno_estructural', data.get('Diseño_Estructural', ''))),
+        'acompanamiento_licencias': formatear_moneda(data.get('acompanamiento_licencias', data.get('Acompañamiento_Licencias', ''))),
+        'subtotal_etapa_1': formatear_moneda(data.get('subtotal_etapa_1', data.get('Subtotal_Etapa_I', ''))),
+        'diseno_electrico': formatear_moneda(data.get('diseno_electrico', data.get('Diseño_Electrico', ''))),
+        'diseno_hidraulico': formatear_moneda(data.get('diseno_hidraulico', data.get('Diseño_Hidraulico', ''))),
+        'presupuesto_proyecto': formatear_moneda(data.get('presupuesto_proyecto', data.get('Presupuesto_Proyecto', ''))),
+        'subtotal_etapa_2': formatear_moneda(data.get('subtotal_etapa_2', data.get('Subtotal_Etapa_II', ''))),
+        'total_general': formatear_moneda(data.get('total_general', data.get('Total_General', ''))),
+        'total_general_texto': data.get('total_general_texto', data.get('Total_General_Texto', '')),
+        'costo_construccion': formatear_moneda(data.get('costo_construccion', data.get('Costo_Construccion', ''))),
     }
 
     # Guardar en Google Sheets (opcional, puedes comentar si no lo usas)
