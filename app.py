@@ -14,7 +14,7 @@ from datetime import datetime
 import locale
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Permite CORS para todos los orígenes. Para producción, puedes usar: CORS(app, origins=["https://preview-react-chatbot-error-kzmii9y2f8qm0tn3tf8y.vusercontent.net"])
 
 def numero_a_texto(numero):
     try:
@@ -152,7 +152,7 @@ def generar_documento():
     """
     data = request.get_json()
     formato = data.get('formato', 'word').lower()  # 'word', 'pdf', 'ambos'
-
+    
     # Mapear los datos a los nombres de variables usados en la plantilla (igual que en la imagen)
     contexto = {
         'nombre': data.get('nombre', ''),
@@ -176,23 +176,23 @@ def generar_documento():
         guardar_en_google_sheets(contexto)
     except Exception as e:
         print(f"Error al guardar en Google Sheets: {e}")
-
+    
     # Verificar plantilla
     plantilla_path = os.path.join(os.path.dirname(__file__), "Formato.docx")
     if not os.path.exists(plantilla_path):
         return jsonify({"error": "No se encontró la plantilla Word"}), 500
-
+    
     # Generar documento Word
     doc = DocxTemplate(plantilla_path)
     doc.render(contexto)
-
+    
     unique_id = str(uuid.uuid4())
     temp_dir = tempfile.mkdtemp()
     docx_path = os.path.join(temp_dir, f"cotizacion_{unique_id}.docx")
     doc.save(docx_path)
-
+    
     archivos_a_limpiar = [temp_dir]
-
+    
     try:
         if formato == 'word':
             # Solo Word
