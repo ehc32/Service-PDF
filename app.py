@@ -14,7 +14,7 @@ from datetime import datetime
 import locale
 
 app = Flask(__name__)
-CORS(app)  # Permite CORS para todos los orígenes. Para producción, puedes usar: CORS(app, origins=["https://preview-react-chatbot-error-kzmii9y2f8qm0tn3tf8y.vusercontent.net"])
+CORS(app, origins=["https://preview-react-chatbot-error-kzmii9y2f8qm0tn3tf8y.vusercontent.net"])
 
 def numero_a_texto(numero):
     try:
