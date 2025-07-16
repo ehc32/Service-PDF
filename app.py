@@ -35,11 +35,19 @@ def guardar_en_google_sheets(data):
     sheet = client.open_by_key("1qWXMepGrgxjZK9QLPxcLcCDlHtsLBIH9Fo0GJDgr_Go").sheet1  
     fila = [
         data.get("nombre", ""),
+        data.get("telefono", ""),
         data.get("correo", ""),
-        data.get("Subtotal_1", ""),
-        data.get("Subtotal_2", ""),
-        data.get("Total", ""),
-        data.get("texto", "")
+        data.get("diseno_arquitectonico", ""),
+        data.get("diseno_estructural", ""),
+        data.get("acompanamiento_licencias", ""),
+        data.get("subtotal_etapa_1", ""),
+        data.get("diseno_electrico", ""),
+        data.get("diseno_hidraulico", ""),
+        data.get("presupuesto_proyecto", ""),
+        data.get("subtotal_etapa_2", ""),
+        data.get("total_general", ""),
+        data.get("total_general_texto", ""),
+        data.get("costo_construccion", "")
     ]
     sheet.append_row(fila)
 
@@ -133,115 +141,80 @@ def detectar_herramienta_conversion():
 @app.route('/generar-documento', methods=['POST'])
 def generar_documento():
     """
-    Genera documento en formato Word y/o PDF
+    Genera documento en formato Word y/o PDF usando los datos recibidos tal cual, sin cálculos ni valores por defecto. Ahora espera un JSON plano.
     """
     data = request.get_json()
     formato = data.get('formato', 'word').lower()  # 'word', 'pdf', 'ambos'
-    
-    # Datos predeterminados solo si no vienen del usuario
-    if not data.get("Acompañamie"): data["Acompañamie"] = "1.516.141"
-    if not data.get("Diseño_Calcu"): data["Diseño_Calcu"] = data.get("Diseño_Calcu", "23.918.292")
-    if not data.get("Diseño_Sanitario"): data["Diseño_Sanitario"] = "20.501.393"
-    # Elimina el campo alternativo si existe    
-    def extraer_numero(texto):
-        if not texto:
-            return 0
-        return int(''.join(filter(str.isdigit, str(texto))) or 0)
-    
-    def formatear_moneda(numero):
-        return "{:,.0f}".format(numero).replace(",", ".")
-    
-    # Cálculos
-    subtotal1 = extraer_numero(data.get("Subtotal_1")) or (
-        extraer_numero(data.get("Diseño_Ar")) +
-        extraer_numero(data.get("Diseño_Calcu")) +
-        extraer_numero(data.get("Acompañamie"))
-    )
-    subtotal2 = extraer_numero(data.get("Subtotal_2")) or (
-        extraer_numero(data.get("Diseño_Calcu")) +
-        extraer_numero(data.get("Diseño_Sanitario")) +
-        extraer_numero(data.get("Presupuesta"))
-    )
-    total = subtotal1 + subtotal2
-    
-    # Agregar la fecha actual en formato '01 de junio de 2025'
+
+    # Mapear los datos a los nombres de variables usados en la plantilla
+    contexto = {
+        'nombre': data.get('nombre', ''),
+        'telefono': data.get('telefono', ''),
+        'correo': data.get('correo', ''),
+        'diseno_arquitectonico': data.get('Diseño_Arquitectonico', ''),
+        'diseno_estructural': data.get('Diseño_Estructural', ''),
+        'acompanamiento_licencias': data.get('Acompañamiento_Licencias', ''),
+        'subtotal_etapa_1': data.get('Subtotal_Etapa_I', ''),
+        'diseno_electrico': data.get('Diseño_Electrico', ''),
+        'diseno_hidraulico': data.get('Diseño_Hidraulico', ''),
+        'presupuesto_proyecto': data.get('Presupuesto_Proyecto', ''),
+        'subtotal_etapa_2': data.get('Subtotal_Etapa_II', ''),
+        'total_general': data.get('Total_General', ''),
+        'total_general_texto': data.get('Total_General_Texto', ''),
+        'costo_construccion': data.get('Costo_Construccion', ''),
+    }
+
+    # Guardar en Google Sheets (opcional, puedes comentar si no lo usas)
     try:
-        locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
-    except:
-        try:
-            locale.setlocale(locale.LC_TIME, 'es_CO.UTF-8')
-        except:
-            locale.setlocale(locale.LC_TIME, '')  # Usa el locale por defecto si no encuentra español
-    fecha_actual = datetime.now().strftime('%d de %B de %Y')
-    # Asegura que el mes esté en minúsculas
-    fecha_actual = fecha_actual[:6] + fecha_actual[6:].lower()
-    data["fecha"] = fecha_actual
-    
-    data["Subtotal_1"] = formatear_moneda(subtotal1)
-    data["Subtotal_2"] = formatear_moneda(subtotal2)
-    data["Total"] = formatear_moneda(total)
-    data["texto"] = numero_a_texto(total)
-    
-    # Guardar en Google Sheets
-    try:
-        guardar_en_google_sheets(data)
+        guardar_en_google_sheets(contexto)
     except Exception as e:
         print(f"Error al guardar en Google Sheets: {e}")
-    
+
     # Verificar plantilla
-    plantilla_path = os.path.join(os.path.dirname(__file__), "plantilla.docx")
+    plantilla_path = os.path.join(os.path.dirname(__file__), "Formato.docx")
     if not os.path.exists(plantilla_path):
         return jsonify({"error": "No se encontró la plantilla Word"}), 500
-    
+
     # Generar documento Word
     doc = DocxTemplate(plantilla_path)
-    doc.render(data)
-    
+    doc.render(contexto)
+
     unique_id = str(uuid.uuid4())
     temp_dir = tempfile.mkdtemp()
     docx_path = os.path.join(temp_dir, f"cotizacion_{unique_id}.docx")
     doc.save(docx_path)
-    
+
     archivos_a_limpiar = [temp_dir]
-    
+
     try:
         if formato == 'word':
             # Solo Word
             response = send_file(docx_path, 
                                as_attachment=True, 
                                download_name=f"cotizacion_{unique_id}.docx")
-            
         elif formato == 'pdf':
-            # Solo PDF
             herramienta = detectar_herramienta_conversion()
             if not herramienta:
                 return jsonify({
                     "error": "No hay herramientas de conversión PDF disponibles",
                     "mensaje": "Instale LibreOffice o pandoc para generar PDFs"
                 }), 500
-            
             try:
                 if herramienta == 'libreoffice':
                     pdf_path, pdf_temp_dir = convertir_word_a_pdf_libreoffice(docx_path)
                 elif herramienta == 'pandoc':
                     pdf_path, pdf_temp_dir = convertir_word_a_pdf_pandoc(docx_path)
-                
                 archivos_a_limpiar.append(pdf_temp_dir)
-                
                 response = send_file(pdf_path, 
                                    as_attachment=True, 
                                    download_name=f"cotizacion_{unique_id}.pdf")
-                
             except Exception as e:
                 return jsonify({
                     "error": "Error al convertir a PDF",
                     "detalle": str(e)
                 }), 500
-        
         else:
             return jsonify({"error": "Formato no válido. Use 'word' o 'pdf'"}), 400
-        
-        # Cleanup al cerrar la respuesta
         @response.call_on_close
         def cleanup():
             for directorio in archivos_a_limpiar:
@@ -250,18 +223,14 @@ def generar_documento():
                         shutil.rmtree(directorio)
                 except Exception as e:
                     print(f"Error al limpiar {directorio}: {e}")
-        
         return response
-        
     except Exception as e:
-        # Cleanup en caso de error
         for directorio in archivos_a_limpiar:
             try:
                 if os.path.exists(directorio):
                     shutil.rmtree(directorio)
             except:
                 pass
-        
         return jsonify({
             "error": "Error interno del servidor",
             "detalle": str(e)
