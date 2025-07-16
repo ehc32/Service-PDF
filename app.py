@@ -169,6 +169,7 @@ def generar_documento():
         'total_general': formatear_moneda(data.get('total_general', data.get('Total_General', ''))),
         'total_general_texto': data.get('total_general_texto', data.get('Total_General_Texto', '')),
         'costo_construccion': formatear_moneda(data.get('costo_construccion', data.get('Costo_Construccion', ''))),
+        "propuesta_tecnica": data.get('propuesta_tecnica', data.get('Propuesta_Tecnica', ''))   
     }
 
     # Guardar en Google Sheets (opcional, puedes comentar si no lo usas)
