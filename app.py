@@ -169,8 +169,6 @@ def generar_documento():
         'subtotal_etapa_2': formatear_moneda(data.get('subtotal_etapa_2', data.get('Subtotal_Etapa_II', ''))),
         'total_general': formatear_moneda(data.get('total_general', data.get('Total_General', ''))),
         'total_general_texto': data.get('total_general_texto', data.get('Total_General_Texto', '')),
-        'costo_construccion': formatear_moneda(data.get('costo_construccion', data.get('Costo_Construccion', ''))),
-        
 
         # Datos de la propuesta técnica
         'areas_basicas_summary': data.get('areas_basicas_summary', ''),
@@ -178,6 +176,7 @@ def generar_documento():
         'habitaciones_adicionales_summary': data.get('habitaciones_adicionales_summary', ''),
         'espacios_adicionales_summary': data.get('espacios_adicionales_summary', ''),
         'm2_formatted' : data.get('m2_formatted', ''), 
+        'costo' : data.get('costo', ''),
     }
 
     # Guardar en Google Sheets (opcional, puedes comentar si no lo usas)
