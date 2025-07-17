@@ -155,6 +155,7 @@ def generar_documento():
     
     # Mapear los datos a los nombres de variables usados en la plantilla (igual que en la imagen)
     contexto = {
+        'fecha': data.get('fecha', datetime.now().strftime('%d/%m/%Y')),
         'nombre': data.get('nombre', ''),
         'telefono': data.get('telefono', ''),
         'correo': data.get('correo', ''),
@@ -169,7 +170,14 @@ def generar_documento():
         'total_general': formatear_moneda(data.get('total_general', data.get('Total_General', ''))),
         'total_general_texto': data.get('total_general_texto', data.get('Total_General_Texto', '')),
         'costo_construccion': formatear_moneda(data.get('costo_construccion', data.get('Costo_Construccion', ''))),
-        "propuesta_tecnica": data.get('propuesta_tecnica', data.get('Propuesta_Tecnica', ''))   
+        
+
+        # Datos de la propuesta técnica
+        'areas_basicas_summary': data.get('areas_basicas_summary', ''),
+        'habitacion_principal_summary': data.get('habitacion_principal_summary', ''),
+        'habitaciones_adicionales_summary': data.get('habitaciones_adicionales_summary', ''),
+        'espacios_adicionales_summary': data.get('espacios_adicionales_summary', ''),
+        'm2_formatted' : data.get('m2_formatted', ''), 
     }
 
     # Guardar en Google Sheets (opcional, puedes comentar si no lo usas)
