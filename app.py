@@ -12,6 +12,7 @@ import tempfile
 import shutil
 from datetime import datetime
 import locale
+from googleapiclient.discovery import build
 
 app = Flask(__name__)
 CORS(app, origins=["https://preview-react-chatbot-error-kzmjv0vtxj89ttk5r5h6.vusercontent.net"])
@@ -40,6 +41,27 @@ def guardar_en_google_sheets(data):
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
     sheet = client.open_by_key("1qWXMepGrgxjZK9QLPxcLcCDlHtsLBIH9Fo0GJDgr_Go").sheet1  
+
+    # Encabezados
+    encabezados = [
+        "Nombre", "Teléfono", "Correo", "Diseño Arquitectónico", "Diseño Estructural",
+        "Acompañamiento Licencias", "Subtotal Etapa 1", "Diseño Eléctrico",
+        "Diseño Hidráulico", "Presupuesto Proyecto", "Subtotal Etapa 2",
+        "Total General", "Total General Texto", "Costo"
+    ]
+
+    hoja_vacia = not sheet.get_all_values()
+    if hoja_vacia:
+        sheet.append_row(encabezados)
+        # Aplicar formato a la primera fila
+        try:
+            poner_encabezado_en_negrita(
+                "1qWXMepGrgxjZK9QLPxcLcCDlHtsLBIH9Fo0GJDgr_Go",
+                creds
+            )
+        except Exception as e:
+            print(f"No se pudo aplicar formato a los encabezados: {e}")
+
     fila = [
         data.get("nombre", ""),
         data.get("telefono", ""),
@@ -54,9 +76,41 @@ def guardar_en_google_sheets(data):
         data.get("subtotal_etapa_2", ""),
         data.get("total_general", ""),
         data.get("total_general_texto", ""),
-        data.get("costo_construccion", "")
+        data.get("costo", "")
     ]
     sheet.append_row(fila)
+
+def poner_encabezado_en_negrita(sheet_id, creds):
+    service = build('sheets', 'v4', credentials=creds)
+    requests = [{
+        "repeatCell": {
+            "range": {
+                "sheetId": 0,  # Generalmente la primera hoja es 0
+                "startRowIndex": 0,
+                "endRowIndex": 1
+            },
+            "cell": {
+                "userEnteredFormat": {
+                    "textFormat": {
+                        "bold": True
+                    },
+                    "backgroundColor": {
+                        "red": 0.9,
+                        "green": 0.9,
+                        "blue": 0.9
+                    }
+                }
+            },
+            "fields": "userEnteredFormat(textFormat,backgroundColor)"
+        }
+    }]
+    body = {
+        'requests': requests
+    }
+    service.spreadsheets().batchUpdate(
+        spreadsheetId=sheet_id,
+        body=body
+    ).execute()
 
 def convertir_word_a_pdf_libreoffice(docx_path):
     """
