@@ -15,7 +15,7 @@ import locale
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
-CORS(app, origins=["https://saavearquitectos.vercel.app/"])
+CORS(app, origins=["https://saavearquitectos.vercel.app"])
 
 def numero_a_texto(numero):
     try:
