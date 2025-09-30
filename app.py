@@ -223,6 +223,7 @@ def generar_documento():
         'subtotal_etapa_2': formatear_moneda(data.get('subtotal_etapa_2', data.get('Subtotal_Etapa_II', ''))),
         'total_general': formatear_moneda(data.get('total_general', data.get('Total_General', ''))),
         'total_general_texto': data.get('total_general_texto', data.get('Total_General_Texto', '')),
+        'iva_amount': formatear_moneda(data.get('iva_amount', data.get('iva_amount', ''))),
 
         # Datos de la propuesta técnica
         'areas_basicas_summary': data.get('areas_basicas_summary', ''),
