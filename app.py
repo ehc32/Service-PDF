@@ -15,8 +15,10 @@ import locale
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
-CORS(app, origins=["https://saave-nu.vercel.app"])
-
+CORS(app, origins=[
+    "https://saave-nu.vercel.app",
+    "http://localhost:3000"
+])
 def numero_a_texto(numero):
     try:
         from num2words import num2words
