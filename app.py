@@ -13,12 +13,36 @@ import shutil
 from datetime import datetime
 import locale
 from googleapiclient.discovery import build
+import signal
+from contextlib import contextmanager
 
 app = Flask(__name__)
-CORS(app, origins=[
-    "https://saave-nu.vercel.app",
-    "http://localhost:3000"
-])
+CORS(app, origins=["https://saave-nu.vercel.app"])
+
+# Cache para herramienta de conversión
+_herramienta_cache = None
+
+class TimeoutException(Exception):
+    pass
+
+@contextmanager
+def tiempo_limite(segundos):
+    """Context manager para timeout en conversiones"""
+    def signal_handler(signum, frame):
+        raise TimeoutException("Timeout en conversión")
+    
+    # Solo usar signals en sistemas Unix
+    if hasattr(signal, 'SIGALRM'):
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.alarm(segundos)
+        try:
+            yield
+        finally:
+            signal.alarm(0)
+    else:
+        # En Windows, solo usar yield sin timeout
+        yield
+
 def numero_a_texto(numero):
     try:
         from num2words import num2words
@@ -44,7 +68,6 @@ def guardar_en_google_sheets(data):
     client = gspread.authorize(creds)
     sheet = client.open_by_key("1qWXMepGrgxjZK9QLPxcLcCDlHtsLBIH9Fo0GJDgr_Go").sheet1  
 
-    # Encabezados
     encabezados = [
         "Nombre", "Teléfono", "Correo", "Diseño Arquitectónico", "Diseño Estructural",
         "Acompañamiento Licencias", "Subtotal Etapa 1", "Diseño Eléctrico",
@@ -55,7 +78,6 @@ def guardar_en_google_sheets(data):
     hoja_vacia = not sheet.get_all_values()
     if hoja_vacia:
         sheet.append_row(encabezados)
-        # Aplicar formato a la primera fila
         try:
             poner_encabezado_en_negrita(
                 "1qWXMepGrgxjZK9QLPxcLcCDlHtsLBIH9Fo0GJDgr_Go",
@@ -87,7 +109,7 @@ def poner_encabezado_en_negrita(sheet_id, creds):
     requests = [{
         "repeatCell": {
             "range": {
-                "sheetId": 0,  # Generalmente la primera hoja es 0
+                "sheetId": 0,
                 "startRowIndex": 0,
                 "endRowIndex": 1
             },
@@ -116,28 +138,38 @@ def poner_encabezado_en_negrita(sheet_id, creds):
 
 def convertir_word_a_pdf_libreoffice(docx_path):
     """
-    Convierte un archivo Word a PDF usando LibreOffice
+    Convierte un archivo Word a PDF usando LibreOffice con optimizaciones
     """
     try:
-        # Crear directorio temporal para la conversión
         temp_dir = tempfile.mkdtemp()
         
-        # Comando para convertir con LibreOffice
+        # Comando optimizado con parámetros para velocidad
         comando = [
             'libreoffice',
             '--headless',
+            '--invisible',
+            '--nodefault',
+            '--nofirststartwizard',
+            '--nolockcheck',
+            '--nologo',
+            '--norestore',
             '--convert-to', 'pdf',
             '--outdir', temp_dir,
             docx_path
         ]
         
-        # Ejecutar conversión
-        resultado = subprocess.run(comando, capture_output=True, text=True, timeout=60)
+        # Timeout aumentado a 120 segundos para documentos complejos
+        resultado = subprocess.run(
+            comando, 
+            capture_output=True, 
+            text=True, 
+            timeout=120,
+            env={**os.environ, 'HOME': temp_dir}  # Evitar conflictos de configuración
+        )
         
         if resultado.returncode != 0:
             raise Exception(f"Error en LibreOffice: {resultado.stderr}")
         
-        # Buscar el archivo PDF generado
         nombre_base = os.path.splitext(os.path.basename(docx_path))[0]
         pdf_path = os.path.join(temp_dir, f"{nombre_base}.pdf")
         
@@ -147,13 +179,17 @@ def convertir_word_a_pdf_libreoffice(docx_path):
         return pdf_path, temp_dir
         
     except subprocess.TimeoutExpired:
-        raise Exception("Timeout en la conversión PDF")
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise Exception("Timeout en conversión PDF - El documento es muy complejo")
     except Exception as e:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
         raise Exception(f"Error al convertir a PDF: {str(e)}")
 
 def convertir_word_a_pdf_pandoc(docx_path):
     """
-    Convierte un archivo Word a PDF usando pandoc
+    Convierte un archivo Word a PDF usando pandoc (alternativa más rápida)
     """
     try:
         temp_dir = tempfile.mkdtemp()
@@ -164,52 +200,81 @@ def convertir_word_a_pdf_pandoc(docx_path):
             'pandoc',
             docx_path,
             '-o', pdf_path,
-            '--pdf-engine=xelatex'
+            '--pdf-engine=xelatex',
+            '--variable', 'geometry:margin=2.5cm'
         ]
         
-        resultado = subprocess.run(comando, capture_output=True, text=True, timeout=30)
+        # Timeout de 60 segundos - pandoc es más rápido
+        resultado = subprocess.run(
+            comando, 
+            capture_output=True, 
+            text=True, 
+            timeout=60
+        )
         
         if resultado.returncode != 0:
             raise Exception(f"Error en pandoc: {resultado.stderr}")
         
         return pdf_path, temp_dir
         
+    except subprocess.TimeoutExpired:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise Exception("Timeout en conversión con pandoc")
     except Exception as e:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
         raise Exception(f"Error al convertir con pandoc: {str(e)}")
 
 def detectar_herramienta_conversion():
     """
-    Detecta qué herramienta de conversión está disponible
+    Detecta qué herramienta de conversión está disponible con caché
     """
-    # Probar LibreOffice
+    global _herramienta_cache
+    
+    # Si ya detectamos la herramienta, devolver desde caché
+    if _herramienta_cache is not None:
+        return _herramienta_cache
+    
+    # Probar LibreOffice primero (más completo)
     try:
-        resultado = subprocess.run(['libreoffice', '--version'], 
-                                 capture_output=True, text=True, timeout=5)
+        resultado = subprocess.run(
+            ['libreoffice', '--version'], 
+            capture_output=True, 
+            text=True, 
+            timeout=3
+        )
         if resultado.returncode == 0:
+            _herramienta_cache = 'libreoffice'
             return 'libreoffice'
     except:
         pass
     
-    # Probar pandoc
+    # Probar pandoc (más rápido)
     try:
-        resultado = subprocess.run(['pandoc', '--version'], 
-                                 capture_output=True, text=True, timeout=5)
+        resultado = subprocess.run(
+            ['pandoc', '--version'], 
+            capture_output=True, 
+            text=True, 
+            timeout=3
+        )
         if resultado.returncode == 0:
+            _herramienta_cache = 'pandoc'
             return 'pandoc'
     except:
         pass
     
+    _herramienta_cache = None
     return None
 
 @app.route('/generar-documento', methods=['POST'])
 def generar_documento():
     """
-    Genera documento en formato Word y/o PDF usando los datos recibidos tal cual, sin cálculos ni valores por defecto. Ahora espera un JSON plano.
+    Genera documento en formato Word y/o PDF usando los datos recibidos
     """
     data = request.get_json()
-    formato = data.get('formato', 'word').lower()  # 'word', 'pdf', 'ambos'
+    formato = data.get('formato', 'word').lower()
     
-    # Mapear los datos a los nombres de variables usados en la plantilla (igual que en la imagen)
     contexto = {
         'fecha': data.get('fecha', datetime.now().strftime('%d/%m/%Y')),
         'nombre': data.get('nombre', ''),
@@ -226,8 +291,6 @@ def generar_documento():
         'total_general': formatear_moneda(data.get('total_general', data.get('Total_General', ''))),
         'total_general_texto': data.get('total_general_texto', data.get('Total_General_Texto', '')),
         'iva_amount': formatear_moneda(data.get('iva_amount', data.get('iva_amount', ''))),
-
-        # Datos de la propuesta técnica
         'areas_basicas_summary': data.get('areas_basicas_summary', ''),
         'habitacion_principal_summary': data.get('habitacion_principal_summary', ''),
         'habitaciones_adicionales_summary': data.get('habitaciones_adicionales_summary', ''),
@@ -236,13 +299,12 @@ def generar_documento():
         'costo' : data.get('costo', ''),
     }
 
-    # Guardar en Google Sheets (opcional, puedes comentar si no lo usas)
+    # Guardar en Google Sheets en background (no bloquear)
     try:
         guardar_en_google_sheets(contexto)
     except Exception as e:
         print(f"Error al guardar en Google Sheets: {e}")
     
-    # Verificar plantilla
     plantilla_path = os.path.join(os.path.dirname(__file__), "Formato.docx")
     if not os.path.exists(plantilla_path):
         return jsonify({"error": "No se encontró la plantilla Word"}), 500
@@ -260,10 +322,12 @@ def generar_documento():
     
     try:
         if formato == 'word':
-            # Solo Word
-            response = send_file(docx_path, 
-                               as_attachment=True, 
-                               download_name=f"cotizacion_{unique_id}.docx")
+            response = send_file(
+                docx_path, 
+                as_attachment=True, 
+                download_name=f"cotizacion_{unique_id}.docx",
+                mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
         elif formato == 'pdf':
             herramienta = detectar_herramienta_conversion()
             if not herramienta:
@@ -272,35 +336,56 @@ def generar_documento():
                     "mensaje": "Instale LibreOffice o pandoc para generar PDFs"
                 }), 500
             try:
+                print(f"Iniciando conversión PDF con {herramienta}...")
+                
                 if herramienta == 'libreoffice':
                     pdf_path, pdf_temp_dir = convertir_word_a_pdf_libreoffice(docx_path)
                 elif herramienta == 'pandoc':
                     pdf_path, pdf_temp_dir = convertir_word_a_pdf_pandoc(docx_path)
+                
                 archivos_a_limpiar.append(pdf_temp_dir)
-                response = send_file(pdf_path, 
-                                   as_attachment=True, 
-                                   download_name=f"cotizacion_{unique_id}.pdf")
+                
+                print(f"PDF generado exitosamente: {pdf_path}")
+                
+                response = send_file(
+                    pdf_path, 
+                    as_attachment=True, 
+                    download_name=f"cotizacion_{unique_id}.pdf",
+                    mimetype='application/pdf'
+                )
+            except TimeoutException:
+                return jsonify({
+                    "error": "Timeout en conversión PDF",
+                    "detalle": "El documento tardó demasiado en convertirse. Intente con un documento más simple o use formato Word.",
+                    "sugerencia": "Puede descargar en Word y convertir localmente"
+                }), 500
             except Exception as e:
+                print(f"Error en conversión PDF: {str(e)}")
                 return jsonify({
                     "error": "Error al convertir a PDF",
-                    "detalle": str(e)
+                    "detalle": str(e),
+                    "sugerencia": "Intente descargar en formato Word"
                 }), 500
         else:
             return jsonify({"error": "Formato no válido. Use 'word' o 'pdf'"}), 400
+        
         @response.call_on_close
         def cleanup():
             for directorio in archivos_a_limpiar:
                 try:
                     if os.path.exists(directorio):
-                        shutil.rmtree(directorio)
+                        shutil.rmtree(directorio, ignore_errors=True)
                 except Exception as e:
                     print(f"Error al limpiar {directorio}: {e}")
+        
         return response
+        
     except Exception as e:
+        # Limpieza en caso de error
         for directorio in archivos_a_limpiar:
             try:
                 if os.path.exists(directorio):
-                    shutil.rmtree(directorio)
+                    shutil.rmtree(directorio, ignore_errors=True)
             except:
                 pass
         return jsonify({
@@ -317,10 +402,10 @@ def herramientas_disponibles():
     return jsonify({
         "herramienta_disponible": herramienta,
         "puede_generar_pdf": herramienta is not None,
-        "formatos_soportados": ['word', 'pdf'] if herramienta else ['word']
+        "formatos_soportados": ['word', 'pdf'] if herramienta else ['word'],
+        "timeout_pdf": "120 segundos" if herramienta == 'libreoffice' else "60 segundos"
     })
 
-# Mantener endpoint original para compatibilidad
 @app.route('/generar-word', methods=['POST'])
 def generar_word():
     """
