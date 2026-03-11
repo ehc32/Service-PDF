@@ -17,7 +17,7 @@ import signal
 from contextlib import contextmanager
 
 app = Flask(__name__)
-CORS(app, origins=["https://saave-nu.vercel.app"])
+CORS(app, origins=["https://saave-nu.vercel.app" ,"http://localhost:3000/" ,"http://localhost:3000"])
 
 # Cache para herramienta de conversión
 _herramienta_cache = None
